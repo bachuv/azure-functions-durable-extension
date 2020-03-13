@@ -49,7 +49,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         internal List<RequestMessage> OperationBatch => this.operationBatch;
 
-        public bool RollbackFailedOperations => this.context.Config.Options.RollbackEntityStateOnExceptions;
+        public bool RollbackFailedOperations => this.context.Config.Options.RollbackEntityOperationsOnExceptions;
 
         public void AddOperationToBatch(RequestMessage operationMessage)
         {
@@ -380,7 +380,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             {
                 var target = new OrchestrationInstance() { InstanceId = request.ParentInstanceId, ExecutionId = request.ParentExecutionId };
                 var jresponse = JToken.FromObject(response, this.dataConverter.MessageSerializer);
-                this.context.SendResponseMessage(target, request.Id, jresponse, !response.IsException);
+                this.context.SendResponseMessage(target, request.Id, jresponse, response.IsException);
             }
         }
 

@@ -35,7 +35,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         // The last serialized checkpoint of the entity state is always stored in
         // the fields this.State.EntityExists (a boolean) and this.State.EntityState (a string).
         // The current state is determined by this.CurrentStateAccess and this.CurrentState.
-
         internal enum StateAccess
         {
             NotAccessed, // current state is same as last checkpoint in this.State

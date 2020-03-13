@@ -734,8 +734,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
         public static async Task<string> CallFaultyEntity([OrchestrationTrigger] IDurableOrchestrationContext ctx)
         {
+            var (entityId, rollbackOnException) = ctx.GetInput<(EntityId, bool)>();
+
             // construct entity id and proxy
-            var entityId = ctx.GetInput<EntityId>();
             var entity = ctx.CreateEntityProxy<TestEntityClasses.IFaultyEntity>(entityId);
             bool isClassBased = entityId.EntityName == "ClassBasedFaultyEntity".ToLowerInvariant();
             async Task ExpectException(Task t)
@@ -763,78 +764,145 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 }
             }
 
-            Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+            try
+            {
 
-            await Assert.ThrowsAsync<EntitySchedulerException>(() => entity.SetToUnserializable());
+                Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
 
-            Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                await Assert.ThrowsAsync<EntitySchedulerException>(() => entity.SetToUnserializable());
 
-            await entity.SetToUnDeserializable();
+                Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
 
-            Assert.True(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                await entity.SetToUnDeserializable();
 
-            await Assert.ThrowsAsync<EntitySchedulerException>(() => entity.Get());
+                Assert.True(await ctx.CallEntityAsync<bool>(entityId, "exists"));
 
-            await ctx.CallEntityAsync<bool>(entityId, "deletewithoutreading");
+                await Assert.ThrowsAsync<EntitySchedulerException>(() => entity.Get());
 
-            Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                await ctx.CallEntityAsync<bool>(entityId, "deletewithoutreading");
 
-            await entity.Set(3);
+                Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
 
-            Assert.Equal(3, await entity.Get());
+                await entity.Set(3);
 
-            await ExpectException(entity.SetThenThrow(333));
+                Assert.Equal(3, await entity.Get());
 
-            Assert.Equal(3, await entity.Get()); // rolled back
+                await ExpectException(entity.SetThenThrow(333));
 
-            await ExpectException(entity.DeleteThenThrow());
+                if (rollbackOnException)
+                {
+                    Assert.Equal(3, await entity.Get());
+                }
+                else
+                {
+                    Assert.Equal(333, await entity.Get());
+                }
 
-            Assert.Equal(3, await entity.Get()); // rolled back
+                await ExpectException(entity.DeleteThenThrow());
 
-            await entity.Delete();
+                if (rollbackOnException)
+                {
+                    Assert.Equal(3, await entity.Get());
+                }
+                else
+                {
+                    Assert.Equal(0, await entity.Get());
+                }
 
-            Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                await entity.Delete();
 
-            await ExpectException(entity.SetThenThrow(333));
+                Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
 
-            Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                await ExpectException(entity.SetThenThrow(333));
 
-            ctx.SignalEntity(entityId, "Set", 42);
-            ctx.SignalEntity(entityId, "SetThenThrow", 333);
-            ctx.SignalEntity(entityId, "DeleteThenThrow");
+                if (rollbackOnException)
+                {
+                    Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                }
+                else
+                {
+                    Assert.True(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                }
 
-            Assert.Equal(42, await entity.Get());
+                // send batch
+                ctx.SignalEntity(entityId, "Set", 42);
+                ctx.SignalEntity(entityId, "SetThenThrow", 333);
+                ctx.SignalEntity(entityId, "DeleteThenThrow");
 
-            ctx.SignalEntity(entityId, "Get");
-            ctx.SignalEntity(entityId, "Set", 42);
-            ctx.SignalEntity(entityId, "Delete");
-            ctx.SignalEntity(entityId, "Set", 43);
-            ctx.SignalEntity(entityId, "DeleteThenThrow");
+                if (rollbackOnException)
+                {
+                    Assert.Equal(42, await entity.Get());
+                }
+                else
+                {
+                    Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                    ctx.SignalEntity(entityId, "Set", 42);
+                }
 
-            Assert.Equal(43, await entity.Get());
+                // send batch
+                ctx.SignalEntity(entityId, "Get");
+                ctx.SignalEntity(entityId, "Set", 42);
+                ctx.SignalEntity(entityId, "Delete");
+                ctx.SignalEntity(entityId, "Set", 43);
+                ctx.SignalEntity(entityId, "DeleteThenThrow");
 
-            ctx.SignalEntity(entityId, "Set", 55);
-            ctx.SignalEntity(entityId, "SetToUnserializable");
+                if (rollbackOnException)
+                {
+                    Assert.Equal(43, await entity.Get());
+                }
+                else
+                {
+                    Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                }
 
-            Assert.Equal(55, await entity.Get());
+                // send batch
+                ctx.SignalEntity(entityId, "Set", 55);
+                ctx.SignalEntity(entityId, "SetToUnserializable");
 
-            ctx.SignalEntity(entityId, "Set", 56);
-            ctx.SignalEntity(entityId, "SetToUnDeserializable");
-            ctx.SignalEntity(entityId, "Set", 12);
-            ctx.SignalEntity(entityId, "SetAndThrow", 999);
+                if (rollbackOnException)
+                {
+                    Assert.Equal(55, await entity.Get());
+                }
+                else
+                {
+                    await Assert.ThrowsAsync<EntitySchedulerException>(() => entity.Get());
+                    await ctx.CallEntityAsync<bool>(entityId, "deletewithoutreading");
+                }
 
-            await Assert.ThrowsAsync<EntitySchedulerException>(() => entity.Get());
-            await ctx.CallEntityAsync<bool>(entityId, "deletewithoutreading");
+                // send batch
+                ctx.SignalEntity(entityId, "Set", 56);
+                ctx.SignalEntity(entityId, "SetToUnDeserializable");
+                ctx.SignalEntity(entityId, "Set", 12);
+                ctx.SignalEntity(entityId, "SetAndThrow", 999);
 
-            ctx.SignalEntity(entityId, "Set", 1);
-            ctx.SignalEntity(entityId, "Delete");
-            ctx.SignalEntity(entityId, "Set", 2);
-            ctx.SignalEntity(entityId, "Delete");
-            ctx.SignalEntity(entityId, "SetThenThrow", 3);
+                if (rollbackOnException)
+                {
+                    await Assert.ThrowsAsync<EntitySchedulerException>(() => entity.Get());
+                }
 
-            Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                await ctx.CallEntityAsync<bool>(entityId, "deletewithoutreading");
 
-            return "ok";
+                ctx.SignalEntity(entityId, "Set", 1);
+                ctx.SignalEntity(entityId, "Delete");
+                ctx.SignalEntity(entityId, "Set", 2);
+                ctx.SignalEntity(entityId, "Delete");
+                ctx.SignalEntity(entityId, "SetThenThrow", 3);
+
+                if (rollbackOnException)
+                {
+                    Assert.False(await ctx.CallEntityAsync<bool>(entityId, "exists"));
+                }
+                else
+                {
+                    Assert.Equal(3, await entity.Get()); // not rolled back
+                }
+
+                return "ok";
+            }
+            catch (Exception e)
+            {
+                return e.ToString();
+            }
         }
 
         public static async Task<string> RollbackSignalsOnExceptions([OrchestrationTrigger] IDurableOrchestrationContext ctx)

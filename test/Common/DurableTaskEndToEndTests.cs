@@ -2505,11 +2505,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true, true)]
-        [InlineData(false, true)]
-        [InlineData(true, false)]
-        [InlineData(false, false)]
-        public async Task DurableEntity_CallFaultyEntity(bool extendedSessions, bool useClassBasedEntity)
+        [InlineData(true, true, true)]
+        [InlineData(false, true, true)]
+        [InlineData(true, false, true)]
+        [InlineData(false, false, true)]
+        [InlineData(true, true, false)]
+        [InlineData(false, true, false)]
+        [InlineData(true, false, false)]
+        [InlineData(false, false, false)]
+        public async Task DurableEntity_CallFaultyEntity(bool extendedSessions, bool useClassBasedEntity, bool rollbackOnExceptions)
         {
             string[] orchestratorFunctionNames =
             {
@@ -2519,13 +2523,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_CallFaultyEntity),
-                extendedSessions))
+                extendedSessions,
+                rollbackEntityOperationsOnExceptions: rollbackOnExceptions))
             {
                 await host.StartAsync();
                 var entityName = useClassBasedEntity ? "ClassBasedFaultyEntity" : "FunctionBasedFaultyEntity";
                 var entityId = new EntityId(entityName, Guid.NewGuid().ToString());
 
-                var client = await host.StartOrchestratorAsync(orchestratorFunctionNames[0], entityId, this.output);
+                var client = await host.StartOrchestratorAsync(orchestratorFunctionNames[0], (entityId, rollbackOnExceptions), this.output);
                 var status = await client.WaitForCompletionAsync(this.output);
 
                 Assert.Equal(OrchestrationRuntimeStatus.Completed, status?.RuntimeStatus);
@@ -2549,7 +2554,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_RollbackSignalsOnExceptions),
-                extendedSessions))
+                extendedSessions,
+                rollbackEntityOperationsOnExceptions: true))
             {
                 await host.StartAsync();
                 var entityName = useClassBasedEntity ? "ClassBasedFaultyEntity" : "FunctionBasedFaultyEntity";
@@ -2571,7 +2577,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 await host.StopAsync();
             }
         }
-
 
         /// <summary>
         /// End-to-end test which validates a simple entity scenario which sends a signal

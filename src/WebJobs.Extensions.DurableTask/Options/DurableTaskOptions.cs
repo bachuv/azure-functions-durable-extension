@@ -193,7 +193,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         /// after each individual operation. If false, the entity state is serialized
         /// only after an entire batch of operations completes.
         /// </remarks>
-        public bool RollbackEntityStateOnExceptions { get; set; } = true;
+        public bool RollbackEntityOperationsOnExceptions { get; set; } = false;
 
         // Used for mocking the lifecycle notification helper.
         internal HttpMessageHandler NotificationHandler { get; set; }
