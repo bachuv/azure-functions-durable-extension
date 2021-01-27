@@ -25,7 +25,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         /// <param name="headers">Headers added to the HTTP request.</param>
         /// <param name="content">Content added to the body of the HTTP request.</param>
         /// <param name="tokenSource">AAD authentication attached to the HTTP request.</param>
-        /// <param name="asynchronousPatternEnabled">Specifies whether the DurableHttpRequest should handle the asynchronous pattern.</param>
+        /// <param name="asynchronousPatternEnabled">Specifies whether the DurableHttpRequest should handle the asynchronous pattern or not.</param>
         public DurableHttpRequest(
             HttpMethod method,
             Uri uri,
